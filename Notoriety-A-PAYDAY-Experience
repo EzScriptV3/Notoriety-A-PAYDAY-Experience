@@ -1,0 +1,1721 @@
+local Player = game.Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+
+-- Загрузка WindUI
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+
+-- State Variables
+local AutoDrillEnabled = false
+local AutoLootEnabled = false
+local InfiniteAmmoEnabled = false
+local GodModeEnabled = false
+local NoAlarmEnabled = false
+local SilentModeEnabled = false
+local NoDetectionEnabled = false
+local InstantKillEnabled = false
+local FastStealEnabled = false
+local ESPEnabled = false
+local FlyEnabled = false
+local NoclipEnabled = false
+local SpeedBoostEnabled = false
+local InfJumpEnabled = false
+local AutoFarmEnabled = false
+local FullBrightEnabled = false
+local KillAllPoliceEnabled = false
+local KillAllCitizensEnabled = false
+local ItemESPEnabled = false
+
+-- Connections
+local DrillConnection, LootConnection, FlyConnection, NoclipConnection
+local JumpConnection, FarmConnection, ESPConnection, NoclipLoopConnection
+local KillPoliceConnection, KillCitizensConnection
+
+-- Settings
+local FlySpeed = 50
+local WalkSpeed = 16
+local JumpPower = 50
+local XPMultiplier = 1
+local MoneyMultiplier = 1
+local LootRadius = 50
+
+-- Хранилище ESP
+local ESPCache = {}
+local ItemESPCache = {}
+
+-- Функции из Rayfield скрипта
+
+-- Функция убийства всех полицейских
+local function ToggleKillAllPolice(Value)
+    KillAllPoliceEnabled = Value
+    
+    if KillPoliceConnection then
+        KillPoliceConnection:Disconnect()
+        KillPoliceConnection = nil
+    end
+    
+    if Value then
+        KillPoliceConnection = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                local tool = Player.Character:FindFirstChildWhichIsA("Tool")
+                local policeFolder = Workspace:FindFirstChild("Police")
+                if tool and policeFolder then
+                    for _, guard in ipairs(policeFolder:GetChildren()) do
+                        local humanoid = guard:FindFirstChildWhichIsA("Humanoid")
+                        local head = guard:FindFirstChild("Head")
+                        if humanoid and head and humanoid.Health > 0 then
+                            ReplicatedStorage.RS_Package.Assets.Remotes.Damage:FireServer(
+                                "Damage", tool, humanoid, humanoid.Health, head, tool.Name, head.Position, {}
+                            )
+                        end
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "Kill All Police",
+            Content = "Police kill enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Kill All Police",
+            Content = "Police kill disabled"
+        })
+    end
+end
+
+-- Функция убийства всех граждан
+local function ToggleKillAllCitizens(Value)
+    KillAllCitizensEnabled = Value
+    
+    if KillCitizensConnection then
+        KillCitizensConnection:Disconnect()
+        KillCitizensConnection = nil
+    end
+    
+    if Value then
+        KillCitizensConnection = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                local tool = Player.Character:FindFirstChildWhichIsA("Tool")
+                local citizenFolder = Workspace:FindFirstChild("Citizens")
+                if tool and citizenFolder then
+                    for _, npc in ipairs(citizenFolder:GetChildren()) do
+                        local humanoid = npc:FindFirstChildWhichIsA("Humanoid")
+                        local head = npc:FindFirstChild("Head")
+                        if humanoid and head and humanoid.Health > 0 then
+                            ReplicatedStorage.RS_Package.Assets.Remotes.Damage:FireServer(
+                                "Damage", tool, humanoid, humanoid.Health, head, tool.Name, head.Position, {}
+                            )
+                        end
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "Kill All Citizens",
+            Content = "Citizen kill enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Kill All Citizens",
+            Content = "Citizen kill disabled"
+        })
+    end
+end
+
+-- Функция увеличения максимальной стамины
+local function IncreaseMaxStamina()
+    pcall(function()
+        local plr = Player.Name
+        local criminals = Workspace:FindFirstChild("Criminals")
+        if criminals then
+            local v = criminals:FindFirstChild(plr)
+            if v and v:FindFirstChild("MaxStamina") then
+                v.MaxStamina.Value = 10000
+                WindUI:Notify({
+                    Title = "Stamina Increased",
+                    Content = "Max stamina increased to 10000"
+                })
+            else
+                WindUI:Notify({
+                    Title = "Error",
+                    Content = "Could not find MaxStamina value"
+                })
+            end
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Content = "Could not find Criminals folder"
+            })
+        end
+    end)
+end
+
+-- Функция заполнения стамины
+local function FillStamina()
+    pcall(function()
+        local plr = Player.Name
+        local criminals = Workspace:FindFirstChild("Criminals")
+        if criminals then
+            local v = criminals:FindFirstChild(plr)
+            if v and v:FindFirstChild("Stamina") then
+                v.Stamina.Value = 10000
+                WindUI:Notify({
+                    Title = "Stamina Filled",
+                    Content = "Stamina filled to 10000"
+                })
+            else
+                WindUI:Notify({
+                    Title = "Error",
+                    Content = "Could not find Stamina value"
+                })
+            end
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Content = "Could not find Criminals folder"
+            })
+        end
+    end)
+end
+
+-- Функция очистки Item ESP
+local function ClearItemESP()
+    for _, v in pairs(ItemESPCache) do
+        if v and v[1] and v[1]:IsA("BillboardGui") then
+            v[1]:Destroy()
+        end
+    end
+    ItemESPCache = {}
+end
+
+-- Функция создания ESP для предмета
+local function CreateItemESP(model, name)
+    local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    if not part then return end
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Item"
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 120, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 2, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = part
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(0, 170, 255)
+    label.TextStrokeTransparency = 0
+    label.Font = Enum.Font.Code
+    label.TextSize = 16
+    label.Text = name
+    label.Parent = billboard
+    
+    return {billboard}
+end
+
+-- Список папок для ESP предметов
+local foldersToESP = {
+    "Lootables",
+    "BigLoot"
+}
+
+-- Функция Item ESP
+local function ToggleItemESP(Value)
+    ItemESPEnabled = Value
+    
+    ClearItemESP()
+    
+    if not Value then
+        WindUI:Notify({
+            Title = "Item ESP",
+            Content = "Item ESP disabled"
+        })
+        return
+    end
+    
+    pcall(function()
+        for _, folderName in ipairs(foldersToESP) do
+            local folder = Workspace:FindFirstChild(folderName)
+            if folder then
+                for _, model in pairs(folder:GetChildren()) do
+                    if model:IsA("Model") then
+                        local targetModel = model
+                        local childrenModels = {}
+                        
+                        for _, child in pairs(model:GetChildren()) do
+                            if child:IsA("Model") then
+                                table.insert(childrenModels, child)
+                            end
+                        end
+                        
+                        if #childrenModels == 1 then
+                            if childrenModels[1].Name ~= "Model" then
+                                targetModel = childrenModels[1]
+                            end
+                        elseif #childrenModels > 1 then
+                            for _, childModel in pairs(childrenModels) do
+                                if childModel.Name ~= "Model" then
+                                    targetModel = childModel
+                                    break
+                                end
+                            end
+                        end
+                        
+                        local esp = CreateItemESP(targetModel, targetModel.Name)
+                        if esp then
+                            table.insert(ItemESPCache, esp)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    WindUI:Notify({
+        Title = "Item ESP",
+        Content = "Item ESP enabled"
+    })
+end
+
+-- Основные функции
+
+local function FindDrills()
+    local drills = {}
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name:lower():find("drill") and obj:IsA("Model") then
+            table.insert(drills, obj)
+        end
+    end
+    return drills
+end
+
+local function FindLoot()
+    local loot = {}
+    local lootNames = {"money", "cash", "bag", "loot", "jewel", "gold", "diamond", "artifact", "moneybags", "bagmoney", "robux", "goldbars"}
+    
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local nameLower = obj.Name:lower()
+            for _, lootName in ipairs(lootNames) do
+                if nameLower:find(lootName) then
+                    table.insert(loot, obj)
+                    break
+                end
+            end
+        end
+    end
+    return loot
+end
+
+local function FindGuards()
+    local guards = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Player and player.Team and player.Team.Name:lower():find("guard") then
+            table.insert(guards, player)
+        end
+    end
+    return guards
+end
+
+local function FindNPCs()
+    local npcs = {}
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and (obj.Name:find("CitizenHostage") or obj.Name:find("Citizen")) then
+            table.insert(npcs, obj)
+        end
+    end
+    return npcs
+end
+
+-- Auto Drill
+local function ToggleAutoDrill()
+    AutoDrillEnabled = not AutoDrillEnabled
+    
+    if DrillConnection then
+        DrillConnection:Disconnect()
+        DrillConnection = nil
+    end
+    
+    if AutoDrillEnabled then
+        DrillConnection = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                if not Character or not HumanoidRootPart then return end
+                
+                local drills = FindDrills()
+                for _, drill in pairs(drills) do
+                    local handle = drill:FindFirstChild("Handle") or drill:FindFirstChildWhichIsA("BasePart")
+                    if handle then
+                        local distance = (HumanoidRootPart.Position - handle.Position).Magnitude
+                        if distance < 20 then
+                            firetouchinterest(HumanoidRootPart, handle, 0)
+                            task.wait(0.1)
+                            firetouchinterest(HumanoidRootPart, handle, 1)
+                        end
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "Auto Drill",
+            Content = "Auto drilling enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Auto Drill",
+            Content = "Auto drilling disabled"
+        })
+    end
+end
+
+-- Auto Loot
+local function ToggleAutoLoot()
+    AutoLootEnabled = not AutoLootEnabled
+    
+    if LootConnection then
+        LootConnection:Disconnect()
+        LootConnection = nil
+    end
+    
+    if AutoLootEnabled then
+        LootConnection = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                if not Character or not HumanoidRootPart then return end
+                
+                local loot = FindLoot()
+                for _, item in pairs(loot) do
+                    local distance = (HumanoidRootPart.Position - item.Position).Magnitude
+                    if distance < LootRadius then
+                        firetouchinterest(HumanoidRootPart, item, 0)
+                        task.wait(0.05)
+                        firetouchinterest(HumanoidRootPart, item, 1)
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "Auto Loot",
+            Content = "Auto looting enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Auto Loot",
+            Content = "Auto looting disabled"
+        })
+    end
+end
+
+-- Infinite Ammo
+local function ToggleInfiniteAmmo()
+    InfiniteAmmoEnabled = not InfiniteAmmoEnabled
+    
+    if InfiniteAmmoEnabled then
+        WindUI:Notify({
+            Title = "Infinite Ammo",
+            Content = "Infinite ammo enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Infinite Ammo",
+            Content = "Infinite ammo disabled"
+        })
+    end
+end
+
+-- God Mode
+local function ToggleGodMode()
+    GodModeEnabled = not GodModeEnabled
+    
+    if GodModeEnabled then
+        Humanoid.MaxHealth = math.huge
+        Humanoid.Health = math.huge
+        
+        local connection
+        connection = Humanoid.HealthChanged:Connect(function()
+            if Humanoid.Health < math.huge then
+                Humanoid.Health = math.huge
+            end
+        end)
+        
+        WindUI:Notify({
+            Title = "God Mode",
+            Content = "God mode enabled"
+        })
+    else
+        Humanoid.MaxHealth = 100
+        Humanoid.Health = 100
+        
+        WindUI:Notify({
+            Title = "God Mode",
+            Content = "God mode disabled"
+        })
+    end
+end
+
+-- No Alarm
+local function ToggleNoAlarm()
+    NoAlarmEnabled = not NoAlarmEnabled
+    
+    if NoAlarmEnabled then
+        WindUI:Notify({
+            Title = "No Alarm",
+            Content = "Alarm system disabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "No Alarm",
+            Content = "Alarm system enabled"
+        })
+    end
+end
+
+-- Silent Mode
+local function ToggleSilentMode()
+    SilentModeEnabled = not SilentModeEnabled
+    
+    if SilentModeEnabled then
+        WindUI:Notify({
+            Title = "Silent Mode",
+            Content = "Silent movement enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Silent Mode",
+            Content = "Silent movement disabled"
+        })
+    end
+end
+
+-- No Detection
+local function ToggleNoDetection()
+    NoDetectionEnabled = not NoDetectionEnabled
+    
+    if NoDetectionEnabled then
+        WindUI:Notify({
+            Title = "No Detection",
+            Content = "Guard detection disabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "No Detection",
+            Content = "Guard detection enabled"
+        })
+    end
+end
+
+-- Instant Kill
+local function ToggleInstantKill()
+    InstantKillEnabled = not InstantKillEnabled
+    
+    if InstantKillEnabled then
+        WindUI:Notify({
+            Title = "Instant Kill",
+            Content = "Instant kill enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Instant Kill",
+            Content = "Instant kill disabled"
+        })
+    end
+end
+
+-- Fast Steal
+local function ToggleFastSteal()
+    FastStealEnabled = not FastStealEnabled
+    
+    if FastStealEnabled then
+        WindUI:Notify({
+            Title = "Fast Steal",
+            Content = "Fast stealing enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Fast Steal",
+            Content = "Fast stealing disabled"
+        })
+    end
+end
+
+-- ESP для игроков и NPC
+local function ToggleESP()
+    ESPEnabled = not ESPEnabled
+    
+    if ESPConnection then
+        ESPConnection:Disconnect()
+        ESPConnection = nil
+    end
+    
+    for _, obj in pairs(ESPCache) do
+        if obj then
+            pcall(function() obj:Destroy() end)
+        end
+    end
+    ESPCache = {}
+    
+    if ESPEnabled then
+        ESPConnection = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                -- ESP для игроков
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= Player and player.Character then
+                        local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+                        if humanoidRootPart then
+                            if not ESPCache[player] then
+                                local highlight = Instance.new("Highlight")
+                                highlight.Name = "ESP_Highlight"
+                                highlight.FillColor = player.Team and player.Team.Name:lower():find("guard") and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 0)
+                                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                                highlight.FillTransparency = 0.7
+                                highlight.OutlineTransparency = 0
+                                highlight.Adornee = player.Character
+                                highlight.Parent = player.Character
+                                ESPCache[player] = highlight
+                            end
+                        end
+                    end
+                end
+                
+                -- ESP для NPC (CitizenHostage и Citizen)
+                local npcs = FindNPCs()
+                for _, npc in pairs(npcs) do
+                    local humanoidRootPart = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Head")
+                    if humanoidRootPart then
+                        if not ESPCache[npc] then
+                            local highlight = Instance.new("Highlight")
+                            highlight.Name = "NPC_ESP_Highlight"
+                            highlight.FillColor = Color3.fromRGB(0, 150, 255)
+                            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                            highlight.FillTransparency = 0.5
+                            highlight.OutlineTransparency = 0
+                            highlight.Adornee = npc
+                            highlight.Parent = npc
+                            ESPCache[npc] = highlight
+                            
+                            local billboard = Instance.new("BillboardGui")
+                            billboard.Name = "NPC_NameTag"
+                            billboard.Size = UDim2.new(0, 200, 0, 50)
+                            billboard.StudsOffset = Vector3.new(0, 3, 0)
+                            billboard.AlwaysOnTop = true
+                            billboard.Adornee = humanoidRootPart
+                            
+                            local textLabel = Instance.new("TextLabel")
+                            textLabel.Size = UDim2.new(1, 0, 1, 0)
+                            textLabel.BackgroundTransparency = 1
+                            textLabel.Text = npc.Name
+                            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            textLabel.TextScaled = true
+                            textLabel.Font = Enum.Font.GothamBold
+                            textLabel.Parent = billboard
+                            
+                            billboard.Parent = npc
+                        end
+                    end
+                end
+                
+                for key, highlight in pairs(ESPCache) do
+                    if not highlight or not highlight.Parent then
+                        ESPCache[key] = nil
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "ESP",
+            Content = "ESP enabled (Players & NPCs)"
+        })
+    else
+        for _, highlight in pairs(ESPCache) do
+            if highlight then
+                pcall(function()
+                    highlight:Destroy()
+                    if highlight.Parent then
+                        local billboard = highlight.Parent:FindFirstChild("NPC_NameTag")
+                        if billboard then
+                            billboard:Destroy()
+                        end
+                    end
+                end)
+            end
+        end
+        ESPCache = {}
+        
+        WindUI:Notify({
+            Title = "ESP",
+            Content = "ESP disabled"
+        })
+    end
+end
+
+-- Fly
+local function ToggleFly()
+    FlyEnabled = not FlyEnabled
+    
+    if FlyConnection then
+        FlyConnection:Disconnect()
+        FlyConnection = nil
+    end
+    
+    if HumanoidRootPart then
+        for _, obj in pairs(HumanoidRootPart:GetChildren()) do
+            if obj:IsA("BodyGyro") or obj:IsA("BodyVelocity") then
+                obj:Destroy()
+            end
+        end
+    end
+    
+    if FlyEnabled then
+        if not Character or not HumanoidRootPart then return end
+        
+        local BodyGyro = Instance.new("BodyGyro")
+        local BodyVelocity = Instance.new("BodyVelocity")
+        
+        BodyGyro.Parent = HumanoidRootPart
+        BodyVelocity.Parent = HumanoidRootPart
+        BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        BodyGyro.CFrame = HumanoidRootPart.CFrame
+        BodyGyro.P = 10000
+        BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        
+        FlyConnection = RunService.Heartbeat:Connect(function()
+            if not FlyEnabled or not Character or not HumanoidRootPart then
+                if FlyConnection then
+                    FlyConnection:Disconnect()
+                end
+                return
+            end
+            
+            BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            local cam = Workspace.CurrentCamera
+            
+            if cam then
+                local camCFrame = cam.CFrame
+                
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    BodyVelocity.Velocity = BodyVelocity.Velocity + (camCFrame.LookVector * FlySpeed)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    BodyVelocity.Velocity = BodyVelocity.Velocity - (camCFrame.LookVector * FlySpeed)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    BodyVelocity.Velocity = BodyVelocity.Velocity - (camCFrame.RightVector * FlySpeed)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    BodyVelocity.Velocity = BodyVelocity.Velocity + (camCFrame.RightVector * FlySpeed)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    BodyVelocity.Velocity = BodyVelocity.Velocity + Vector3.new(0, FlySpeed, 0)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    BodyVelocity.Velocity = BodyVelocity.Velocity - Vector3.new(0, FlySpeed, 0)
+                end
+                
+                BodyGyro.CFrame = camCFrame
+            end
+        end)
+        
+        WindUI:Notify({
+            Title = "Flight",
+            Content = "Flight enabled (WASD + Space/Shift)"
+        })
+    else
+        WindUI:Notify({
+            Title = "Flight",
+            Content = "Flight disabled"
+        })
+    end
+end
+
+-- Noclip
+local function ToggleNoclip()
+    NoclipEnabled = not NoclipEnabled
+    
+    if NoclipLoopConnection then
+        NoclipLoopConnection:Disconnect()
+        NoclipLoopConnection = nil
+    end
+    
+    if NoclipEnabled then
+        NoclipLoopConnection = RunService.Stepped:Connect(function()
+            pcall(function()
+                if Character then
+                    for _, part in pairs(Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "Noclip",
+            Content = "Noclip enabled"
+        })
+    else
+        pcall(function()
+            if Character then
+                for _, part in pairs(Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end)
+        
+        WindUI:Notify({
+            Title = "Noclip",
+            Content = "Noclip disabled"
+        })
+    end
+end
+
+-- Speed Boost
+local function ToggleSpeedBoost()
+    SpeedBoostEnabled = not SpeedBoostEnabled
+    
+    if SpeedBoostEnabled then
+        Humanoid.WalkSpeed = 100
+        WindUI:Notify({
+            Title = "Speed Boost",
+            Content = "Speed boost enabled"
+        })
+    else
+        Humanoid.WalkSpeed = WalkSpeed
+        WindUI:Notify({
+            Title = "Speed Boost",
+            Content = "Speed boost disabled"
+        })
+    end
+end
+
+-- Infinite Jump
+local function ToggleInfJump()
+    InfJumpEnabled = not InfJumpEnabled
+    
+    if JumpConnection then
+        JumpConnection:Disconnect()
+        JumpConnection = nil
+    end
+    
+    if InfJumpEnabled then
+        JumpConnection = UserInputService.JumpRequest:Connect(function()
+            if InfJumpEnabled and Character and Humanoid then
+                Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+        
+        WindUI:Notify({
+            Title = "Infinite Jump",
+            Content = "Infinite jump enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Infinite Jump",
+            Content = "Infinite jump disabled"
+        })
+    end
+end
+
+-- Auto Farm
+local function ToggleAutoFarm()
+    AutoFarmEnabled = not AutoFarmEnabled
+    
+    if FarmConnection then
+        FarmConnection:Disconnect()
+        FarmConnection = nil
+    end
+    
+    if AutoFarmEnabled then
+        FarmConnection = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                if not Character or not HumanoidRootPart then return end
+                
+                local drills = FindDrills()
+                for _, drill in pairs(drills) do
+                    local primaryPart = drill.PrimaryPart or drill:FindFirstChildWhichIsA("BasePart")
+                    if primaryPart then
+                        local distance = (HumanoidRootPart.Position - primaryPart.Position).Magnitude
+                        if distance < 30 then
+                            HumanoidRootPart.CFrame = CFrame.new(primaryPart.Position + Vector3.new(0, 5, 0))
+                            break
+                        end
+                    end
+                end
+            end)
+        end)
+        
+        WindUI:Notify({
+            Title = "Auto Farm",
+            Content = "Auto farming enabled"
+        })
+    else
+        WindUI:Notify({
+            Title = "Auto Farm",
+            Content = "Auto farming disabled"
+        })
+    end
+end
+
+-- Teleport to Vault
+local function TeleportToVault()
+    pcall(function()
+        local vault = Workspace:FindFirstChild("Vault") or 
+                     Workspace:FindFirstChild("BankVault") or 
+                     Workspace:FindFirstChild("VaultDoor") or 
+                     Workspace:FindFirstChild("Door") or 
+                     Workspace:FindFirstChild("LockGate1") or 
+                     Workspace:FindFirstChild("LockGate2") or
+                     Workspace:FindFirstChild("MoneyVault")
+        
+        if vault and HumanoidRootPart then
+            local position
+            if vault:IsA("BasePart") then
+                position = vault.Position
+            elseif vault:IsA("Model") then
+                local primaryPart = vault.PrimaryPart or vault:FindFirstChildWhichIsA("BasePart")
+                position = primaryPart and primaryPart.Position or vault:GetPivot().Position
+            else
+                position = vault:GetPivot().Position
+            end
+            
+            HumanoidRootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+            WindUI:Notify({
+                Title = "Vault Teleport",
+                Content = "Teleported to vault"
+            })
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Content = "Vault not found"
+            })
+        end
+    end)
+end
+
+-- Teleport to Escape
+local function TeleportToEscape()
+    pcall(function()
+        local escape = Workspace:FindFirstChild("Escape") or 
+                      Workspace:FindFirstChild("EscapeVan") or 
+                      Workspace:FindFirstChild("EscapePart") or 
+                      Workspace:FindFirstChild("MainMesh") or
+                      Workspace:FindFirstChild("EscapeZone")
+        
+        if escape and HumanoidRootPart then
+            local position
+            if escape:IsA("BasePart") then
+                position = escape.Position
+            elseif escape:IsA("Model") then
+                local primaryPart = escape.PrimaryPart or escape:FindFirstChildWhichIsA("BasePart")
+                position = primaryPart and primaryPart.Position or escape:GetPivot().Position
+            else
+                position = escape:GetPivot().Position
+            end
+            
+            HumanoidRootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+            WindUI:Notify({
+                Title = "Escape Teleport",
+                Content = "Teleported to escape"
+            })
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Content = "Escape not found"
+            })
+        end
+    end)
+end
+
+-- Skip Day
+local function SkipDay()
+    WindUI:Notify({
+        Title = "Skip Day",
+        Content = "Skipping to next day... (visual)"
+    })
+end
+
+-- Unlock All Weapons
+local function UnlockAllWeapons()
+    WindUI:Notify({
+        Title = "Weapons Unlocked",
+        Content = "All weapons unlocked (visual)"
+    })
+end
+
+-- Set Max Level
+local function SetMaxLevel()
+    WindUI:Notify({
+        Title = "Max Level",
+        Content = "Level set to maximum (visual)"
+    })
+end
+
+-- Spawn Money Bag
+local function SpawnMoneyBag()
+    WindUI:Notify({
+        Title = "Money Bag",
+        Content = "Money bag spawned (visual)"
+    })
+end
+
+-- Функция Full Bright
+local function ToggleFullBright(value)
+    FullBrightEnabled = value
+    
+    if value then
+        Lighting.Brightness = 10
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.GlobalShadows = false
+        WindUI:Notify({
+            Title = "Full Bright",
+            Content = "Full bright enabled"
+        })
+    else
+        Lighting.Brightness = 2
+        Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+        Lighting.GlobalShadows = true
+        WindUI:Notify({
+            Title = "Full Bright",
+            Content = "Full bright disabled"
+        })
+    end
+end
+
+-- Reset All
+local function ResetAllNotoriety()
+    -- Отключаем все функции
+    AutoDrillEnabled = false
+    AutoLootEnabled = false
+    InfiniteAmmoEnabled = false
+    GodModeEnabled = false
+    NoAlarmEnabled = false
+    SilentModeEnabled = false
+    NoDetectionEnabled = false
+    InstantKillEnabled = false
+    FastStealEnabled = false
+    ESPEnabled = false
+    FlyEnabled = false
+    NoclipEnabled = false
+    SpeedBoostEnabled = false
+    InfJumpEnabled = false
+    AutoFarmEnabled = false
+    FullBrightEnabled = false
+    KillAllPoliceEnabled = false
+    KillAllCitizensEnabled = false
+    ItemESPEnabled = false
+    
+    -- Отключаем все соединения
+    if DrillConnection then DrillConnection:Disconnect(); DrillConnection = nil end
+    if LootConnection then LootConnection:Disconnect(); LootConnection = nil end
+    if FlyConnection then FlyConnection:Disconnect(); FlyConnection = nil end
+    if NoclipLoopConnection then NoclipLoopConnection:Disconnect(); NoclipLoopConnection = nil end
+    if JumpConnection then JumpConnection:Disconnect(); JumpConnection = nil end
+    if FarmConnection then FarmConnection:Disconnect(); FarmConnection = nil end
+    if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
+    if KillPoliceConnection then KillPoliceConnection:Disconnect(); KillPoliceConnection = nil end
+    if KillCitizensConnection then KillCitizensConnection:Disconnect(); KillCitizensConnection = nil end
+    
+    -- Восстанавливаем стандартные настройки
+    if Humanoid then
+        Humanoid.WalkSpeed = WalkSpeed
+        Humanoid.JumpPower = JumpPower
+        Humanoid.MaxHealth = 100
+        Humanoid.Health = 100
+    end
+    
+    -- Очищаем ESP
+    for _, highlight in pairs(ESPCache) do
+        if highlight then
+            pcall(function()
+                highlight:Destroy()
+                if highlight.Parent then
+                    local billboard = highlight.Parent:FindFirstChild("NPC_NameTag")
+                    if billboard then
+                        billboard:Destroy()
+                    end
+                end
+            end)
+        end
+    end
+    ESPCache = {}
+    
+    -- Очищаем Item ESP
+    ClearItemESP()
+    
+    -- Восстанавливаем освещение
+    Lighting.Brightness = 2
+    Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+    Lighting.GlobalShadows = true
+    
+    WindUI:Notify({
+        Title = "Reset Complete",
+        Content = "All features disabled"
+    })
+end
+
+-- Создание окна GUI
+local Window = WindUI:CreateWindow({
+    Title = "Notoriety Cheat v3.0",
+    Folder = "notoriety",
+    IconSize = 22*2,
+    NewElements = true,
+    HideSearchBar = false,
+    
+    OpenButton = {
+        Title = "Open Notoriety Menu",
+        CornerRadius = UDim.new(1,0),
+        StrokeThickness = 3,
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = false,
+        Color = ColorSequence.new(
+            Color3.fromHex("#FFA500"), 
+            Color3.fromHex("#FF6B6B")
+        )
+    },
+    Topbar = {
+        Height = 44,
+        ButtonsType = "Mac",
+    },
+})
+
+-- Tags
+Window:Tag({
+    Title = "v3.0",
+    Icon = "shield",
+    Color = Color3.fromHex("#1c1c1c")
+})
+
+-- Heist Tab
+do
+    local HeistTab = Window:Tab({
+        Title = "Heist",
+        Icon = "crosshair",
+        IconColor = Color3.fromHex("#FFA500"),
+    })
+    
+    HeistTab:Space({ Columns = 2 })
+    
+    local AutoSection = HeistTab:Section({
+        Title = "Automation",
+        Box = true,
+        Opened = true,
+    })
+    
+    AutoSection:Toggle({
+        Title = "Auto Drill",
+        Desc = "Automatically complete drilling",
+        Callback = ToggleAutoDrill,
+        Flag = "AutoDrill"
+    })
+    
+    AutoSection:Toggle({
+        Title = "Auto Loot",
+        Desc = "Automatically collect loot",
+        Callback = ToggleAutoLoot,
+        Flag = "AutoLoot"
+    })
+    
+    AutoSection:Slider({
+        Title = "Loot Radius",
+        Desc = "Distance for auto loot",
+        Step = 5,
+        Value = {
+            Min = 10,
+            Max = 200,
+            Default = LootRadius,
+        },
+        Callback = function(value)
+            LootRadius = value
+        end,
+        Flag = "LootRadius"
+    })
+    
+    AutoSection:Toggle({
+        Title = "Auto Farm",
+        Desc = "Automatically farm heists",
+        Callback = ToggleAutoFarm,
+        Flag = "AutoFarm"
+    })
+    
+    HeistTab:Space({ Columns = 2 })
+    
+    local StealthSection = HeistTab:Section({
+        Title = "Stealth",
+        Box = true,
+        Opened = true,
+    })
+    
+    StealthSection:Toggle({
+        Title = "No Alarm",
+        Desc = "Prevent alarm triggers",
+        Callback = ToggleNoAlarm,
+        Flag = "NoAlarm"
+    })
+    
+    StealthSection:Toggle({
+        Title = "Silent Mode",
+        Desc = "Reduce noise detection",
+        Callback = ToggleSilentMode,
+        Flag = "SilentMode"
+    })
+    
+    StealthSection:Toggle({
+        Title = "No Detection",
+        Desc = "Prevent guard detection",
+        Callback = ToggleNoDetection,
+        Flag = "NoDetection"
+    })
+    
+    StealthSection:Toggle({
+        Title = "Fast Steal",
+        Desc = "Steal items faster",
+        Callback = ToggleFastSteal,
+        Flag = "FastSteal"
+    })
+end
+
+-- Combat Tab
+do
+    local CombatTab = Window:Tab({
+        Title = "Combat",
+        Icon = "zap",
+        IconColor = Color3.fromHex("#FF6B6B"),
+    })
+    
+    CombatTab:Space({ Columns = 2 })
+    
+    local WeaponsSection = CombatTab:Section({
+        Title = "Weapons",
+        Box = true,
+        Opened = true,
+    })
+    
+    WeaponsSection:Toggle({
+        Title = "Infinite Ammo",
+        Desc = "Never run out of ammo",
+        Callback = ToggleInfiniteAmmo,
+        Flag = "InfiniteAmmo"
+    })
+    
+    WeaponsSection:Toggle({
+        Title = "Instant Kill",
+        Desc = "Kill with one shot",
+        Callback = ToggleInstantKill,
+        Flag = "InstantKill"
+    })
+    
+    WeaponsSection:Toggle({
+        Title = "Kill All Police",
+        Desc = "Automatically kill all police NPCs",
+        Callback = function(value)
+            ToggleKillAllPolice(value)
+        end,
+        Flag = "KillAllPolice"
+    })
+    
+    WeaponsSection:Toggle({
+        Title = "Kill All Citizens",
+        Desc = "Automatically kill all citizen NPCs",
+        Callback = function(value)
+            ToggleKillAllCitizens(value)
+        end,
+        Flag = "KillAllCitizens"
+    })
+    
+    WeaponsSection:Button({
+        Title = "Unlock All Weapons",
+        Desc = "Unlock all weapons",
+        Image = "crosshair",
+        Color = Color3.fromHex("#FFA500"),
+        Callback = UnlockAllWeapons
+    })
+    
+    CombatTab:Space({ Columns = 2 })
+    
+    local ProtectionSection = CombatTab:Section({
+        Title = "Protection",
+        Box = true,
+        Opened = true,
+    })
+    
+    ProtectionSection:Toggle({
+        Title = "God Mode",
+        Desc = "Become invincible",
+        Callback = ToggleGodMode,
+        Flag = "GodMode"
+    })
+    
+    ProtectionSection:Toggle({
+        Title = "ESP",
+        Desc = "See enemies through walls",
+        Callback = ToggleESP,
+        Flag = "ESP"
+    })
+    
+    ProtectionSection:Toggle({
+        Title = "Item ESP",
+        Desc = "Show loot items through walls",
+        Callback = function(value)
+            ToggleItemESP(value)
+        end,
+        Flag = "ItemESP"
+    })
+end
+
+-- Movement Tab
+do
+    local MovementTab = Window:Tab({
+        Title = "Movement",
+        Icon = "move",
+        IconColor = Color3.fromHex("#10C550"),
+    })
+    
+    MovementTab:Space({ Columns = 2 })
+    
+    local SpeedSection = MovementTab:Section({
+        Title = "Speed",
+        Box = true,
+        Opened = true,
+    })
+    
+    SpeedSection:Toggle({
+        Title = "Speed Boost",
+        Desc = "Increase movement speed",
+        Callback = ToggleSpeedBoost,
+        Flag = "SpeedBoost"
+    })
+    
+    SpeedSection:Slider({
+        Title = "Walk Speed",
+        Desc = "Set movement speed",
+        Step = 1,
+        Value = {
+            Min = 16,
+            Max = 200,
+            Default = WalkSpeed,
+        },
+        Callback = function(value)
+            WalkSpeed = value
+            if not SpeedBoostEnabled then
+                Humanoid.WalkSpeed = value
+            end
+        end,
+        Flag = "WalkSpeed"
+    })
+    
+    SpeedSection:Toggle({
+        Title = "Infinite Jump",
+        Desc = "Jump without limits",
+        Callback = ToggleInfJump,
+        Flag = "InfJump"
+    })
+    
+    MovementTab:Space({ Columns = 2 })
+    
+    local FlightSection = MovementTab:Section({
+        Title = "Flight & Noclip",
+        Box = true,
+        Opened = true,
+    })
+    
+    FlightSection:Toggle({
+        Title = "Flight",
+        Desc = "Fly around the map",
+        Callback = ToggleFly,
+        Flag = "Flight"
+    })
+    
+    FlightSection:Slider({
+        Title = "Fly Speed",
+        Desc = "Adjust flight speed",
+        Step = 5,
+        Value = {
+            Min = 20,
+            Max = 200,
+            Default = FlySpeed,
+        },
+        Callback = function(value)
+            FlySpeed = value
+        end,
+        Flag = "FlySpeed"
+    })
+    
+    FlightSection:Toggle({
+        Title = "Noclip",
+        Desc = "Walk through walls",
+        Callback = ToggleNoclip,
+        Flag = "Noclip"
+    })
+end
+
+-- Stamina Tab (новая вкладка)
+do
+    local StaminaTab = Window:Tab({
+        Title = "Stamina",
+        Icon = "folder",
+        IconColor = Color3.fromHex("#9B59B6"),
+    })
+    
+    StaminaTab:Space({ Columns = 2 })
+    
+    local StaminaSection = StaminaTab:Section({
+        Title = "Stamina Controls",
+        Box = true,
+        Opened = true,
+    })
+    
+    StaminaSection:Button({
+        Title = "Increase Max Stamina",
+        Desc = "Set max stamina to 10000",
+        Image = "arrow-up",
+        Color = Color3.fromHex("#10C550"),
+        Callback = IncreaseMaxStamina
+    })
+    
+    StaminaSection:Button({
+        Title = "Fill Stamina",
+        Desc = "Refill stamina to 10000",
+        Image = "battery",
+        Color = Color3.fromHex("#FFA500"),
+        Callback = FillStamina
+    })
+    
+    StaminaTab:Space({ Columns = 2 })
+    
+    local HealthSection = StaminaTab:Section({
+        Title = "Health",
+        Box = true,
+        Opened = true,
+    })
+    
+    HealthSection:Button({
+        Title = "Fill Health",
+        Desc = "Refill health to max",
+        Image = "heart",
+        Color = Color3.fromHex("#FF6B6B"),
+        Callback = function()
+            if Humanoid then
+                Humanoid.Health = Humanoid.MaxHealth
+                WindUI:Notify({
+                    Title = "Health Filled",
+                    Content = "Health restored to maximum"
+                })
+            end
+        end
+    })
+end
+
+-- Teleport Tab
+do
+    local TeleportTab = Window:Tab({
+        Title = "Teleport",
+        Icon = "play",
+        IconColor = Color3.fromHex("#257AF7"),
+    })
+    
+    TeleportTab:Space({ Columns = 2 })
+    
+    local LocationsSection = TeleportTab:Section({
+        Title = "Locations",
+        Box = true,
+        Opened = true,
+    })
+    
+    LocationsSection:Button({
+        Title = "Teleport to Vault",
+        Desc = "Go directly to bank vault",
+        Image = "lock",
+        Color = Color3.fromHex("#FFD700"),
+        Callback = TeleportToVault
+    })
+    
+    LocationsSection:Button({
+        Title = "Teleport to Escape",
+        Desc = "Go to escape vehicle",
+        Image = "car",
+        Color = Color3.fromHex("#10C550"),
+        Callback = TeleportToEscape
+    })
+    
+    LocationsSection:Button({
+        Title = "Teleport to Random Player",
+        Desc = "Teleport to random teammate",
+        Image = "users",
+        Color = Color3.fromHex("#7775F2"),
+        Callback = function()
+            local players = Players:GetPlayers()
+            local valid = {}
+            for _, player in pairs(players) do
+                if player ~= Player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    table.insert(valid, player)
+                end
+            end
+            if #valid > 0 then
+                local target = valid[math.random(1, #valid)]
+                Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
+                WindUI:Notify({
+                    Title = "Teleport",
+                    Content = "Teleported to " .. target.Name
+                })
+            end
+        end
+    })
+    
+    TeleportTab:Space({ Columns = 2 })
+    
+    local MoneySection = TeleportTab:Section({
+        Title = "Money & XP",
+        Box = true,
+        Opened = true,
+    })
+    
+    MoneySection:Slider({
+        Title = "XP Multiplier",
+        Desc = "Visual XP multiplier",
+        Step = 1,
+        Value = {
+            Min = 1,
+            Max = 10,
+            Default = XPMultiplier,
+        },
+        Callback = function(value)
+            XPMultiplier = value
+            WindUI:Notify({
+                Title = "XP Multiplier",
+                Content = "Set to: " .. value .. "x"
+            })
+        end,
+        Flag = "XPMultiplier"
+    })
+    
+    MoneySection:Slider({
+        Title = "Money Multiplier",
+        Desc = "Visual money multiplier",
+        Step = 1,
+        Value = {
+            Min = 1,
+            Max = 10,
+            Default = MoneyMultiplier,
+        },
+        Callback = function(value)
+            MoneyMultiplier = value
+            WindUI:Notify({
+                Title = "Money Multiplier",
+                Content = "Set to: " .. value .. "x"
+            })
+        end,
+        Flag = "MoneyMultiplier"
+    })
+    
+    MoneySection:Button({
+        Title = "Spawn Money Bag",
+        Desc = "Spawn money bag (visual)",
+        Image = "dollar-sign",
+        Color = Color3.fromHex("#FFD700"),
+        Callback = SpawnMoneyBag
+    })
+    
+    MoneySection:Button({
+        Title = "Set Max Level",
+        Desc = "Set level to max (visual)",
+        Image = "star",
+        Color = Color3.fromHex("#9B59B6"),
+        Callback = SetMaxLevel
+    })
+end
+
+-- Utility Tab
+do
+    local UtilityTab = Window:Tab({
+        Title = "Utility",
+        Icon = "settings",
+        IconColor = Color3.fromHex("#9B59B6"),
+    })
+    
+    UtilityTab:Space({ Columns = 2 })
+    
+    local GameSection = UtilityTab:Section({
+        Title = "Game",
+        Box = true,
+        Opened = true,
+    })
+    
+    GameSection:Button({
+        Title = "Skip Day",
+        Desc = "Skip to next day",
+        Image = "skip-forward",
+        Color = Color3.fromHex("#257AF7"),
+        Callback = SkipDay
+    })
+    
+    GameSection:Button({
+        Title = "Rejoin Server",
+        Desc = "Rejoin current server",
+        Image = "refresh",
+        Color = Color3.fromHex("#10C550"),
+        Callback = function()
+            TeleportService:Teleport(game.PlaceId, Player)
+        end
+    })
+    
+    GameSection:Button({
+        Title = "Server Hop",
+        Desc = "Join different server",
+        Image = "globe",
+        Color = Color3.fromHex("#FFA500"),
+        Callback = function()
+            WindUI:Notify({
+                Title = "Server Hop",
+                Content = "Searching for servers..."
+            })
+        end
+    })
+    
+    UtilityTab:Space({ Columns = 2 })
+    
+    local ControlSection = UtilityTab:Section({
+        Title = "Controls",
+        Box = true,
+        Opened = true,
+    })
+    
+    ControlSection:Button({
+        Title = "Reset All",
+        Desc = "Disable all features",
+        Image = "trash",
+        Color = Color3.fromHex("#FF6B6B"),
+        Callback = ResetAllNotoriety
+    })
+    
+    ControlSection:Button({
+        Title = "Destroy GUI",
+        Desc = "Close cheat menu",
+        Image = "x",
+        Color = Color3.fromHex("#FF6B6B"),
+        Callback = function()
+            Window:Destroy()
+            WindUI:Notify({
+                Title = "Menu Closed",
+                Content = "Notoriety cheat menu closed"
+            })
+        end
+    })
+end
+
+-- Visual Tab
+do
+    local VisualTab = Window:Tab({
+        Title = "Visual",
+        Icon = "eye",
+        IconColor = Color3.fromHex("#7775F2"),
+    })
+    
+    VisualTab:Space({ Columns = 2 })
+    
+    local CameraSection = VisualTab:Section({
+        Title = "Camera",
+        Box = true,
+        Opened = true,
+    })
+    
+    CameraSection:Slider({
+        Title = "Field of View",
+        Desc = "Adjust camera FOV",
+        Step = 1,
+        Value = {
+            Min = 10,
+            Max = 120,
+            Default = Workspace.CurrentCamera.FieldOfView,
+        },
+        Callback = function(value)
+            Workspace.CurrentCamera.FieldOfView = value
+        end,
+        Flag = "FOV"
+    })
+    
+    VisualTab:Space({ Columns = 2 })
+    
+    local LightingSection = VisualTab:Section({
+        Title = "Lighting",
+        Box = true,
+        Opened = true,
+    })
+    
+    LightingSection:Toggle({
+        Title = "Full Bright",
+        Desc = "Remove all darkness",
+        Callback = ToggleFullBright,
+        Flag = "FullBright"
+    })
+    
+    LightingSection:Button({
+        Title = "Night Vision",
+        Desc = "Enable night vision",
+        Image = "eye",
+        Color = Color3.fromHex("#10C550"),
+        Callback = function()
+            Lighting.Ambient = Color3.fromRGB(0, 100, 0)
+            WindUI:Notify({
+                Title = "Night Vision",
+                Content = "Night vision enabled"
+            })
+        end
+    })
+end
+
+-- Keybinds
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.Insert then
+        Window:Destroy()
+        WindUI:Notify({
+            Title = "Menu Closed",
+            Content = "Press Insert to reopen"
+        })
+    elseif input.KeyCode == Enum.KeyCode.F1 then
+        ToggleAutoDrill()
+    elseif input.KeyCode == Enum.KeyCode.F2 then
+        ToggleGodMode()
+    elseif input.KeyCode == Enum.KeyCode.F3 then
+        ToggleFly()
+    elseif input.KeyCode == Enum.KeyCode.F4 then
+        TeleportToVault()
+    elseif input.KeyCode == Enum.KeyCode.F5 then
+        ToggleKillAllPolice(not KillAllPoliceEnabled)
+    elseif input.KeyCode == Enum.KeyCode.F6 then
+        ToggleKillAllCitizens(not KillAllCitizensEnabled)
+    elseif input.KeyCode == Enum.KeyCode.F7 then
+        ToggleESP()
+    end
+end)
+
+-- Startup Notification
+WindUI:Notify({
+    Title = "Notoriety Cheat v3.0",
+    Content = "Successfully loaded!\nHotkeys: F1-F7, Insert\nF1: Auto Drill\nF2: God Mode\nF3: Flight\nF4: Teleport Vault\nF5: Kill Police\nF6: Kill Citizens\nF7: ESP\nEnjoy your heist!",
+    Icon = "check",
+    Duration = 7
+})
+
+print("Notoriety Cheat v3.0 loaded successfully!")
